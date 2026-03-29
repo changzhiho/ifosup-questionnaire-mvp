@@ -1,5 +1,3 @@
-cat > README.md << 'EOF'
-
 # IFOSUP Questionnaire MVP
 
 Application web de questionnaires pour professeurs et étudiants IFOSUP.  

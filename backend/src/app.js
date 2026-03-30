@@ -4,6 +4,7 @@ const cors    = require('cors');
 const formsRouter     = require('./routes/forms');
 const sessionsRouter  = require('./routes/sessions');
 const responsesRouter = require('./routes/responses');
+const adminRouter = require('./routes/admin');
 require('dotenv').config();
 
 const authRouter = require('./routes/auth');
@@ -34,3 +35,5 @@ app.use((req, res) => {
 });
 
 module.exports = app;
+
+app.use('/api/admin', adminRouter);

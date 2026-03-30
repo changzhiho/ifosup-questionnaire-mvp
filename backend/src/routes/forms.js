@@ -115,3 +115,52 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+// PUT /api/forms/:id — modifier titre/description
+router.put('/:id', async (req, res) => {
+  const { title, description, is_global } = req.body;
+  if (!title) return res.status(400).json({ error: 'Titre requis' });
+  try {
+    const [result] = await pool.query(
+      'UPDATE form_templates SET title=?, description=?, is_global=? WHERE id=? AND owner_user_id=?',
+      [title, description || null, is_global || false, req.params.id, req.user.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Formulaire introuvable' });
+    res.json({ message: 'Formulaire mis à jour' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/forms/:id/questions — ajouter une question à un formulaire existant
+router.post('/:id/questions', async (req, res) => {
+  const { type, label, help_text, is_required, order_index, config_json, options } = req.body;
+  if (!type || !label) return res.status(400).json({ error: 'type et label requis' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [qResult] = await conn.query(
+      `INSERT INTO form_questions (form_template_id, type, label, help_text, is_required, order_index, config_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.params.id, type, label, help_text || null, is_required || false, order_index || 0,
+       config_json ? JSON.stringify(config_json) : null]
+    );
+    if (options && Array.isArray(options)) {
+      for (let j = 0; j < options.length; j++) {
+        await conn.query(
+          'INSERT INTO form_question_options (question_id, label, value, order_index) VALUES (?,?,?,?)',
+          [qResult.insertId, options[j].label, options[j].value, j]
+        );
+      }
+    }
+    await conn.commit();
+    res.status(201).json({ message: 'Question ajoutée', questionId: qResult.insertId });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    conn.release();
+  }
+});
+

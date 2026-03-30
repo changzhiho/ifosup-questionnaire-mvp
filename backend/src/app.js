@@ -1,6 +1,9 @@
 // backend/src/app.js
 const express = require('express');
 const cors    = require('cors');
+const formsRouter     = require('./routes/forms');
+const sessionsRouter  = require('./routes/sessions');
+const responsesRouter = require('./routes/responses');
 require('dotenv').config();
 
 const authRouter = require('./routes/auth');
@@ -15,6 +18,10 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/auth',     authRouter);
+app.use('/api/forms',    formsRouter);
+app.use('/api/sessions', sessionsRouter);
+app.use('/api/sessions', responsesRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {

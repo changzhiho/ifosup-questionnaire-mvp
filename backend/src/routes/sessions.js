@@ -9,6 +9,26 @@ function generateJoinCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+// GET /api/sessions — liste des sessions du prof connecté
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const [sessions] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.join_code, s.created_at,
+              f.title as form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON s.form_template_id = f.id
+       WHERE s.created_by_user_id = ?
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json(sessions)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+
 // POST /api/sessions — créer une session (JWT requis)
 router.post('/', authMiddleware, async (req, res) => {
   const { form_template_id, title, course_id, formation_id, academic_year_id, closes_at } = req.body;
@@ -36,6 +56,26 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+// GET /api/sessions — liste des sessions du prof connecté
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const [sessions] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.join_code, s.created_at,
+              f.title as form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON s.form_template_id = f.id
+       WHERE s.created_by_user_id = ?
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json(sessions)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
 
 // GET /api/sessions/:id/qrcode (JWT requis)
 router.get('/:id/qrcode', authMiddleware, async (req, res) => {

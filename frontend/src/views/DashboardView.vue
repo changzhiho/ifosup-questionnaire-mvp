@@ -1,24 +1,18 @@
 <template>
   <div class="min-h-screen bg-gray-50">
 
-    <!-- Header -->
     <header class="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
       <h1 class="text-lg font-bold text-gray-800">IFOSUP — Tableau de bord</h1>
       <div class="flex items-center gap-4">
         <span class="text-sm text-gray-500">{{ auth.user?.email }}</span>
-        <button
-          @click="handleLogout"
-          class="text-sm text-red-500 hover:text-red-700 transition"
-        >
+        <button @click="handleLogout" class="text-sm text-red-500 hover:text-red-700 transition">
           Déconnexion
         </button>
       </div>
     </header>
 
-    <!-- Contenu -->
     <main class="max-w-4xl mx-auto px-4 py-8">
 
-      <!-- Actions -->
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-gray-700">Mes sessions</h2>
         <button
@@ -30,21 +24,13 @@
         </button>
       </div>
 
-      <!-- Loading -->
-      <div v-if="loading" class="text-center py-12 text-gray-400">
-        Chargement...
-      </div>
+      <div v-if="loading" class="text-center py-12 text-gray-400">Chargement...</div>
 
-      <!-- Empty state -->
-      <div
-        v-else-if="sessions.length === 0"
-        class="text-center py-12 text-gray-400"
-      >
+      <div v-else-if="sessions.length === 0" class="text-center py-12 text-gray-400">
         <p class="text-lg">Aucune session pour le moment.</p>
         <p class="text-sm mt-1">Crée ta première session pour commencer.</p>
       </div>
 
-      <!-- Liste des sessions -->
       <div v-else class="space-y-3">
         <div
           v-for="session in sessions"
@@ -56,25 +42,20 @@
             <p class="text-xs text-gray-400 mt-0.5">
               Code : <span class="font-mono">{{ session.join_code }}</span>
               · Statut :
-              <span
-                :class="{
-                  'text-green-600': session.status === 'open',
-                  'text-yellow-600': session.status === 'draft',
-                  'text-red-500': session.status === 'closed',
-                }"
-              >
-                {{ session.status }}
-              </span>
+              <span :class="{
+                'text-green-600': session.status === 'open',
+                'text-yellow-600': session.status === 'draft',
+                'text-red-500': session.status === 'closed',
+              }">{{ session.status }}</span>
             </p>
           </div>
-          <button
-            @click="goToSession(session.id)"
-            class="text-sm text-blue-600 hover:underline"
-          >
+          <button @click="goToSession(session.id)" class="text-sm text-blue-600 hover:underline">
             Gérer →
           </button>
         </div>
       </div>
+
+      <p v-if="errorMsg" class="text-sm text-red-500 text-center mt-4">{{ errorMsg }}</p>
 
     </main>
   </div>
@@ -92,31 +73,41 @@ const auth = useAuthStore()
 const sessions = ref([])
 const loading = ref(true)
 const creating = ref(false)
+const errorMsg = ref('')
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('/api/sessions')
+    const { data } = await api.get('/sessions')
     sessions.value = data
   } catch (err) {
     console.error('Erreur chargement sessions', err)
+    errorMsg.value = 'Impossible de charger les sessions.'
   } finally {
     loading.value = false
   }
 })
-
 async function createSession() {
   creating.value = true
+  errorMsg.value = ''
   try {
-    const { data } = await api.post('/api/sessions', {
+    const response = await api.post('/forms', { title: 'Nouveau formulaire' })
+    const formId = response.data.formId
+
+    await api.post('/sessions', {
+      form_template_id: formId,
       title: 'Nouvelle session',
     })
-    router.push(`/session/${data.id}`)
+
+    router.push(`/form-builder/${formId}`)
   } catch (err) {
     console.error('Erreur création session', err)
+    errorMsg.value = 'Erreur lors de la création de la session.'
   } finally {
     creating.value = false
   }
 }
+
+
 
 function goToSession(id) {
   router.push(`/session/${id}`)

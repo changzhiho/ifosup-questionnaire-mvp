@@ -31,3 +31,6 @@ Thumbs.db
 *.tgz
 .cache/
 EOF
+
+tmp/
+*.tmp

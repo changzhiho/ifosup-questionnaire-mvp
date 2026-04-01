@@ -154,4 +154,134 @@ router.get('/:code', async (req, res) => {
   }
 });
 
+// GET /api/sessions/:id/results
+router.get('/:id/results', authMiddleware, async (req, res) => {
+  try {
+    const sessionId = req.params.id
+
+    const [[session]] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.form_template_id, f.title AS form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON f.id = s.form_template_id
+       WHERE s.id = ? AND s.created_by_user_id = ?`,
+      [sessionId, req.user.id]
+    )
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session introuvable' })
+    }
+
+    const [questions] = await pool.query(
+      `SELECT q.id, q.question_text, q.question_type, q.position
+       FROM form_questions q
+       WHERE q.form_template_id = ?
+       ORDER BY q.position ASC, q.id ASC`,
+      [session.form_template_id]
+    )
+
+    const results = []
+
+    for (const question of questions) {
+      if (question.question_type === 'multiple_choice') {
+        const [options] = await pool.query(
+          `SELECT id, option_text
+           FROM form_question_options
+           WHERE question_id = ?
+           ORDER BY id ASC`,
+          [question.id]
+        )
+
+        const [counts] = await pool.query(
+          `SELECT answer_value, COUNT(*) AS count
+           FROM survey_answers
+           WHERE question_id = ?
+           GROUP BY answer_value`,
+          [question.id]
+        )
+
+        const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
+
+        const choices = options.map((option) => {
+          const found = counts.find((c) => c.answer_value === option.option_text)
+          const count = found ? Number(found.count) : 0
+          return {
+            label: option.option_text,
+            count,
+            percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+          }
+        })
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: total,
+          choices,
+        })
+      } else if (question.question_type === 'scale') {
+        const [counts] = await pool.query(
+          `SELECT answer_value, COUNT(*) AS count
+           FROM survey_answers
+           WHERE question_id = ?
+           GROUP BY answer_value
+           ORDER BY CAST(answer_value AS UNSIGNED) ASC`,
+          [question.id]
+        )
+
+        const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
+
+        const scale = [1, 2, 3, 4, 5].map((value) => {
+          const found = counts.find((c) => Number(c.answer_value) === value)
+          const count = found ? Number(found.count) : 0
+          return {
+            label: String(value),
+            count,
+            percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+          }
+        })
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: total,
+          choices: scale,
+        })
+      } else {
+        const [answers] = await pool.query(
+          `SELECT answer_value
+           FROM survey_answers
+           WHERE question_id = ?
+             AND answer_value IS NOT NULL
+             AND TRIM(answer_value) <> ''
+           ORDER BY id DESC`,
+          [question.id]
+        )
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: answers.length,
+          text_answers: answers.map((a) => a.answer_value),
+        })
+      }
+    }
+
+    res.json({
+      session: {
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        form_title: session.form_title,
+      },
+      results,
+    })
+  } catch (err) {
+    console.error('Erreur GET /sessions/:id/results', err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+
 module.exports = router;

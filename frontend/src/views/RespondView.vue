@@ -53,7 +53,7 @@
           </p>
 
           <h2 class="text-xl font-semibold text-gray-800 leading-snug mb-6">
-            {{ currentQuestion.text }}
+            {{ currentQuestion.label }}
           </h2>
 
           <!-- Multiple choice -->
@@ -62,17 +62,18 @@
               v-for="option in currentQuestion.options"
               :key="option.id"
               type="button"
-              @click="setAnswer(currentQuestion.id, option.option_text)"
+              @click="setAnswer(currentQuestion.id, option.label)"
               :class="[
                 'w-full text-left rounded-xl border px-4 py-4 text-base transition',
-                answers[currentQuestion.id] === option.option_text
+                answers[currentQuestion.id] === option.label
                   ? 'border-blue-600 bg-blue-50 text-blue-700'
                   : 'border-gray-200 bg-white text-gray-700'
               ]"
             >
-              {{ option.option_text }}
+              {{ option.label }}
             </button>
           </div>
+
 
           <!-- Scale -->
           <div v-else-if="currentQuestion.type === 'scale'" class="grid grid-cols-5 gap-2">
@@ -239,7 +240,7 @@ function buildAnswerPayload(question) {
 
   if (question.type === 'multiple_choice') {
     const option = question.options.find(
-      (opt) => opt.value === value || opt.label === value
+      (opt) => opt.value === value
     )
 
     return {

@@ -87,7 +87,7 @@ router.get('/:id/qrcode', authMiddleware, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'Session introuvable' });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const joinUrl = `${frontendUrl}/join/${session.join_code}`;
+    const joinUrl = `${frontendUrl}/respond/${session.join_code}`;
     const qrBase64 = await QRCode.toDataURL(joinUrl);
 
     res.json({ join_code: session.join_code, qr_base64: qrBase64, url: joinUrl });

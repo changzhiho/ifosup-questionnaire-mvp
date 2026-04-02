@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS survey_sessions (
 CREATE TABLE IF NOT EXISTS survey_responses (
     id INT AUTO_INCREMENT PRIMARY KEY,
     survey_session_id INT NOT NULL,
+    submit_token VARCHAR(255) DEFAULT NULL,
     submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_sr_session FOREIGN KEY (survey_session_id) REFERENCES survey_sessions (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

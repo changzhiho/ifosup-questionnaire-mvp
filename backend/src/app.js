@@ -19,11 +19,12 @@ app.use(cors({
 app.use(express.json());
 
 // Routes
-app.use('/api/auth', authRouter);
 app.use('/api/auth',     authRouter);
 app.use('/api/forms',    formsRouter);
 app.use('/api/sessions', sessionsRouter);
-app.use('/api/sessions', responsesRouter)
+app.use('/api/sessions', responsesRouter);
+app.use('/api/admin',    adminRouter);
+app.use('/api/join',     joinRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -36,7 +37,3 @@ app.use((req, res) => {
 });
 
 module.exports = app;
-
-app.use('/api/admin', adminRouter);
-
-app.use('/api/join', joinRouter);

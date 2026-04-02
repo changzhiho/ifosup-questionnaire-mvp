@@ -1,3 +1,4 @@
+
 // backend/src/routes/forms.js
 const router = require('express').Router();
 const pool   = require('../config/db');
@@ -114,24 +115,61 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
 
-// PUT /api/forms/:id — modifier titre/description
+// PUT /api/forms/:id — sauvegarder titre + toutes les questions
 router.put('/:id', async (req, res) => {
-  const { title, description, is_global } = req.body;
+  const { title, description, is_global, questions = [] } = req.body;
   if (!title) return res.status(400).json({ error: 'Titre requis' });
+
+  const conn = await pool.getConnection();
   try {
-    const [result] = await pool.query(
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
       'UPDATE form_templates SET title=?, description=?, is_global=? WHERE id=? AND owner_user_id=?',
       [title, description || null, is_global || false, req.params.id, req.user.id]
     );
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'Formulaire introuvable' });
-    res.json({ message: 'Formulaire mis à jour' });
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Formulaire introuvable' });
+    }
+
+    await conn.query(
+      'DELETE FROM form_questions WHERE form_template_id = ?',
+      [req.params.id]
+    );
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const [qResult] = await conn.query(
+        `INSERT INTO form_questions
+          (form_template_id, type, label, help_text, is_required, order_index, config_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.params.id, q.type, q.label, q.help_text || null,
+         q.is_required || false, i,
+         q.config_json ? JSON.stringify(q.config_json) : null]
+      );
+      if (q.options && Array.isArray(q.options)) {
+        for (let j = 0; j < q.options.length; j++) {
+          await conn.query(
+            'INSERT INTO form_question_options (question_id, label, value, order_index) VALUES (?,?,?,?)',
+            [qResult.insertId, q.options[j].label, q.options[j].value, j]
+          );
+        }
+      }
+    }
+
+    await conn.commit();
+    res.json({ message: 'Formulaire sauvegardé' });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    conn.release();
   }
 });
+
 
 // POST /api/forms/:id/questions — ajouter une question à un formulaire existant
 router.post('/:id/questions', async (req, res) => {
@@ -164,3 +202,4 @@ router.post('/:id/questions', async (req, res) => {
   }
 });
 
+module.exports = router;

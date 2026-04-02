@@ -9,6 +9,26 @@ function generateJoinCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+// GET /api/sessions — liste des sessions du prof connecté
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const [sessions] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.join_code, s.created_at,
+              f.title as form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON s.form_template_id = f.id
+       WHERE s.created_by_user_id = ?
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json(sessions)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+
 // POST /api/sessions — créer une session (JWT requis)
 router.post('/', authMiddleware, async (req, res) => {
   const { form_template_id, title, course_id, formation_id, academic_year_id, closes_at } = req.body;
@@ -36,6 +56,26 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+// GET /api/sessions — liste des sessions du prof connecté
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const [sessions] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.join_code, s.created_at,
+              f.title as form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON s.form_template_id = f.id
+       WHERE s.created_by_user_id = ?
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json(sessions)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
 
 // GET /api/sessions/:id/qrcode (JWT requis)
 router.get('/:id/qrcode', authMiddleware, async (req, res) => {
@@ -113,5 +153,155 @@ router.get('/:code', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+// GET /api/sessions/:id/results
+router.get('/:id/results', authMiddleware, async (req, res) => {
+  try {
+    const sessionId = req.params.id
+
+    const [[session]] = await pool.query(
+      `SELECT s.id, s.title, s.status, s.form_template_id, f.title AS form_title
+       FROM survey_sessions s
+       JOIN form_templates f ON f.id = s.form_template_id
+       WHERE s.id = ? AND s.created_by_user_id = ?`,
+      [sessionId, req.user.id]
+    )
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session introuvable' })
+    }
+
+    const [questions] = await pool.query(
+      `SELECT q.id, q.label AS question_text, q.type AS question_type, q.order_index AS position, q.config_json
+       FROM form_questions q
+       WHERE q.form_template_id = ?
+       ORDER BY q.order_index ASC, q.id ASC`,
+      [session.form_template_id]
+    )
+
+    const results = []
+
+    for (const question of questions) {
+      if (question.question_type === 'multiple_choice') {
+        const [options] = await pool.query(
+          `SELECT id, label, value, order_index
+           FROM form_question_options
+           WHERE question_id = ?
+           ORDER BY order_index ASC, id ASC`,
+          [question.id]
+        )
+
+        const [counts] = await pool.query(
+          `SELECT sa.value_option_id, COUNT(*) AS count
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_option_id IS NOT NULL
+           GROUP BY sa.value_option_id`,
+          [sessionId, question.id]
+        )
+
+        const totalResponses = counts.reduce((sum, row) => sum + Number(row.count), 0)
+
+        const choices = options.map((option) => {
+          const found = counts.find((c) => Number(c.value_option_id) === option.id)
+          const count = found ? Number(found.count) : 0
+
+          return {
+            label: option.label,
+            count,
+            percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
+          }
+        })
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: totalResponses,
+          choices,
+        })
+      } else if (question.question_type === 'scale') {
+        const [counts] = await pool.query(
+          `SELECT sa.value_number, COUNT(*) AS count
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_number IS NOT NULL
+           GROUP BY sa.value_number
+           ORDER BY sa.value_number ASC`,
+          [sessionId, question.id]
+        )
+
+        const maxScale =
+          Number(
+            (() => {
+              try {
+                return JSON.parse(question.config_json || '{}')?.max
+              } catch {
+                return null
+              }
+            })()
+          ) || 5
+
+        const totalResponses = counts.reduce((sum, row) => sum + Number(row.count), 0)
+
+        const scale = Array.from({ length: maxScale }, (_, i) => i + 1).map((value) => {
+          const found = counts.find((c) => Number(c.value_number) === value)
+          const count = found ? Number(found.count) : 0
+
+          return {
+            label: String(value),
+            count,
+            percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
+          }
+        })
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: totalResponses,
+          choices: scale,
+        })
+      } else {
+        const [answers] = await pool.query(
+          `SELECT sa.value_text
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_text IS NOT NULL
+             AND TRIM(sa.value_text) <> ''
+           ORDER BY sa.id DESC`,
+          [sessionId, question.id]
+        )
+
+        results.push({
+          id: question.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          total_responses: answers.length,
+          text_answers: answers.map((a) => a.value_text),
+        })
+      }
+    }
+
+    res.json({
+      session: {
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        form_title: session.form_title,
+      },
+      results,
+    })
+  } catch (err) {
+    console.error('Erreur GET /sessions/:id/results', err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
 
 module.exports = router;

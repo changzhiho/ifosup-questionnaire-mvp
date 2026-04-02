@@ -81,7 +81,7 @@ async function handleLogin() {
   errorMsg.value = ''
   loading.value = true
   try {
-    const { data } = await api.post('/api/auth/login', form.value)
+    const { data } = await api.post('/auth/login', form.value)
     auth.setAuth(data.token, data.user)
     router.push('/dashboard')
   } catch (err) {

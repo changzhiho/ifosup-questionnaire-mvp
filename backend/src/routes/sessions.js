@@ -172,10 +172,10 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
     }
 
     const [questions] = await pool.query(
-      `SELECT q.id, q.question_text, q.question_type, q.position
+      `SELECT q.id, q.label AS question_text, q.type AS question_type, q.order_index AS position, q.config_json
        FROM form_questions q
        WHERE q.form_template_id = ?
-       ORDER BY q.position ASC, q.id ASC`,
+       ORDER BY q.order_index ASC, q.id ASC`,
       [session.form_template_id]
     )
 
@@ -184,28 +184,31 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
     for (const question of questions) {
       if (question.question_type === 'multiple_choice') {
         const [options] = await pool.query(
-          `SELECT id, option_text
+          `SELECT id, label, value, order_index
            FROM form_question_options
            WHERE question_id = ?
-           ORDER BY id ASC`,
+           ORDER BY order_index ASC, id ASC`,
           [question.id]
         )
 
         const [counts] = await pool.query(
-          `SELECT answer_value, COUNT(*) AS count
-           FROM survey_answers
-           WHERE question_id = ?
-           GROUP BY answer_value`,
-          [question.id]
+          `SELECT value_option_id, COUNT(*) AS count
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_option_id IS NOT NULL
+           GROUP BY value_option_id`,
+          [sessionId, question.id]
         )
 
         const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
 
         const choices = options.map((option) => {
-          const found = counts.find((c) => c.answer_value === option.option_text)
+          const found = counts.find((c) => Number(c.value_option_id) === option.id)
           const count = found ? Number(found.count) : 0
           return {
-            label: option.option_text,
+            label: option.label,
             count,
             percentage: total > 0 ? Math.round((count / total) * 100) : 0,
           }
@@ -220,18 +223,34 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
         })
       } else if (question.question_type === 'scale') {
         const [counts] = await pool.query(
-          `SELECT answer_value, COUNT(*) AS count
-           FROM survey_answers
-           WHERE question_id = ?
-           GROUP BY answer_value
-           ORDER BY CAST(answer_value AS UNSIGNED) ASC`,
-          [question.id]
+          `SELECT value_number, COUNT(*) AS count
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_number IS NOT NULL
+           GROUP BY value_number
+           ORDER BY value_number ASC`,
+          [sessionId, question.id]
         )
+
+        const maxScale =
+          Number(
+            (() => {
+              try {
+                return JSON.parse(
+                  questions.find((q) => q.id === question.id)?.config_json || '{}'
+                )?.max
+              } catch {
+                return null
+              }
+            })()
+          ) || 5
 
         const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
 
-        const scale = [1, 2, 3, 4, 5].map((value) => {
-          const found = counts.find((c) => Number(c.answer_value) === value)
+        const scale = Array.from({ length: maxScale }, (_, i) => i + 1).map((value) => {
+          const found = counts.find((c) => Number(c.value_number) === value)
           const count = found ? Number(found.count) : 0
           return {
             label: String(value),
@@ -249,13 +268,15 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
         })
       } else {
         const [answers] = await pool.query(
-          `SELECT answer_value
-           FROM survey_answers
-           WHERE question_id = ?
-             AND answer_value IS NOT NULL
-             AND TRIM(answer_value) <> ''
-           ORDER BY id DESC`,
-          [question.id]
+          `SELECT sa.value_text
+           FROM survey_answers sa
+           JOIN survey_responses sr ON sr.id = sa.response_id
+           WHERE sr.survey_session_id = ?
+             AND sa.question_id = ?
+             AND sa.value_text IS NOT NULL
+             AND TRIM(sa.value_text) <> ''
+           ORDER BY sa.id DESC`,
+          [sessionId, question.id]
         )
 
         results.push({
@@ -263,7 +284,7 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
           question_text: question.question_text,
           question_type: question.question_type,
           total_responses: answers.length,
-          text_answers: answers.map((a) => a.answer_value),
+          text_answers: answers.map((a) => a.value_text),
         })
       }
     }
@@ -282,6 +303,7 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' })
   }
 })
+
 
 
 module.exports = router;

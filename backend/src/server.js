@@ -7,6 +7,6 @@ const port = process.env.PORT || 3000;
 // Connexion BDD au démarrage (importé pour l'effet de bord du log)
 require('./config/db');
 
-app.listen(port, () => {
+app.listen(port,'0.0.0.0', () => {
   console.log(`🚀 Serveur démarré sur http://localhost:${port}`);
 });

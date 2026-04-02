@@ -43,7 +43,7 @@
             {{ session.join_code }}
           </p>
           <p class="text-xs text-gray-400 mt-2">
-            Les étudiants saisissent ce code sur <span class="font-medium">{{ frontendUrl }}/join</span>
+            Les étudiants saisissent ce code sur <span class="font-medium">{{ frontendUrl }}/respond</span>
           </p>
         </div>
 

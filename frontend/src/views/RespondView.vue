@@ -56,16 +56,16 @@
             {{ currentQuestion.label }}
           </h2>
 
-          <!-- Multiple choice -->
+          <!-- Multiple choice (checkbox) -->
           <div v-if="currentQuestion.type === 'multiple_choice'" class="space-y-3">
             <button
               v-for="option in currentQuestion.options"
               :key="option.id"
               type="button"
-              @click="setAnswer(currentQuestion.id, option.label)"
+              @click="setAnswer(currentQuestion.id, option.id)"
               :class="[
                 'w-full text-left rounded-xl border px-4 py-4 text-base transition',
-                answers[currentQuestion.id] === option.label
+                Number(answers[currentQuestion.id]) === option.id
                   ? 'border-blue-600 bg-blue-50 text-blue-700'
                   : 'border-gray-200 bg-white text-gray-700'
               ]"
@@ -73,7 +73,6 @@
               {{ option.label }}
             </button>
           </div>
-
 
           <!-- Scale -->
           <div v-else-if="currentQuestion.type === 'scale'" class="grid grid-cols-5 gap-2">
@@ -199,6 +198,7 @@ function validateCurrentQuestion() {
   return true
 }
 
+
 function nextQuestion() {
   if (!validateCurrentQuestion()) return
   if (currentIndex.value < questions.value.length - 1) {
@@ -239,15 +239,11 @@ function buildAnswerPayload(question) {
   const value = answers.value[question.id]
 
   if (question.type === 'multiple_choice') {
-    const option = question.options.find(
-      (opt) => opt.value === value
-    )
-
     return {
       question_id: question.id,
       value_text: null,
       value_number: null,
-      value_option_id: option ? option.id : null,
+      value_option_id: value ? Number(value) : null,
     }
   }
 
@@ -267,6 +263,7 @@ function buildAnswerPayload(question) {
     value_option_id: null,
   }
 }
+
 
 async function submitAnswers() {
   if (!validateCurrentQuestion()) return

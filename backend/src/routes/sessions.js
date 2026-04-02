@@ -192,25 +192,26 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
         )
 
         const [counts] = await pool.query(
-          `SELECT value_option_id, COUNT(*) AS count
+          `SELECT sa.value_option_id, COUNT(*) AS count
            FROM survey_answers sa
            JOIN survey_responses sr ON sr.id = sa.response_id
            WHERE sr.survey_session_id = ?
              AND sa.question_id = ?
              AND sa.value_option_id IS NOT NULL
-           GROUP BY value_option_id`,
+           GROUP BY sa.value_option_id`,
           [sessionId, question.id]
         )
 
-        const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
+        const totalResponses = counts.reduce((sum, row) => sum + Number(row.count), 0)
 
         const choices = options.map((option) => {
           const found = counts.find((c) => Number(c.value_option_id) === option.id)
           const count = found ? Number(found.count) : 0
+
           return {
             label: option.label,
             count,
-            percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+            percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
           }
         })
 
@@ -218,19 +219,19 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
           id: question.id,
           question_text: question.question_text,
           question_type: question.question_type,
-          total_responses: total,
+          total_responses: totalResponses,
           choices,
         })
       } else if (question.question_type === 'scale') {
         const [counts] = await pool.query(
-          `SELECT value_number, COUNT(*) AS count
+          `SELECT sa.value_number, COUNT(*) AS count
            FROM survey_answers sa
            JOIN survey_responses sr ON sr.id = sa.response_id
            WHERE sr.survey_session_id = ?
              AND sa.question_id = ?
              AND sa.value_number IS NOT NULL
-           GROUP BY value_number
-           ORDER BY value_number ASC`,
+           GROUP BY sa.value_number
+           ORDER BY sa.value_number ASC`,
           [sessionId, question.id]
         )
 
@@ -238,24 +239,23 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
           Number(
             (() => {
               try {
-                return JSON.parse(
-                  questions.find((q) => q.id === question.id)?.config_json || '{}'
-                )?.max
+                return JSON.parse(question.config_json || '{}')?.max
               } catch {
                 return null
               }
             })()
           ) || 5
 
-        const total = counts.reduce((sum, row) => sum + Number(row.count), 0)
+        const totalResponses = counts.reduce((sum, row) => sum + Number(row.count), 0)
 
         const scale = Array.from({ length: maxScale }, (_, i) => i + 1).map((value) => {
           const found = counts.find((c) => Number(c.value_number) === value)
           const count = found ? Number(found.count) : 0
+
           return {
             label: String(value),
             count,
-            percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+            percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
           }
         })
 
@@ -263,7 +263,7 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
           id: question.id,
           question_text: question.question_text,
           question_type: question.question_type,
-          total_responses: total,
+          total_responses: totalResponses,
           choices: scale,
         })
       } else {
@@ -303,7 +303,5 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' })
   }
 })
-
-
 
 module.exports = router;

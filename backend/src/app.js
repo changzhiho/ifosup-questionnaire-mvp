@@ -6,13 +6,12 @@ const sessionsRouter  = require('./routes/sessions');
 const responsesRouter = require('./routes/responses');
 const adminRouter = require('./routes/admin');
 const joinRouter = require('./routes/join');
-
 const authRouter = require('./routes/auth');
 
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [process.env.FRONTEND_URL, 'http://localhost:5173'],
   credentials: true,
 }));
 app.use(express.json());
